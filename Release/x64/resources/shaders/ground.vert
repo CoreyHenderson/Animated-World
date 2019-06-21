@@ -1,16 +1,8 @@
-// A basic vertex shader, intended to help explore light shaders. 
-
 #version 330 core
-layout (location = 0) in vec3 VertexPosition;
-layout (location = 1) in vec3 VertexNormal;
-layout (location = 2) in vec2 VertexST;
 
-uniform float a;
-uniform float b;
-uniform float c;
-float d = 0.6;
-float e = 0.4;
-float f = 0.7;
+layout (location = 0) in vec3 VertexPosition;
+layout (location = 1) in vec2 VertexST;
+layout (location = 2) in vec3 VertexNormal;
 
 uniform vec4 LightPosition;
 uniform mat4 WorldMatrix;
@@ -19,6 +11,7 @@ uniform mat4 ProjectionMatrix;
 uniform mat4 ShadowMatrix;
 
 uniform sampler2D texture1;
+
 uniform float pauto;
 
 out VertexData
@@ -31,26 +24,14 @@ out VertexData
     vec4 EyeSpaceObjectPosition;
     vec4 WorldSpaceObjectPosition;
     vec4 ShadowCoord;               // Used in later steps
-
+	
 	// The terrain data to pass onto fragment shader
-    float height;               // Height value
-    float terrx;                // x-coord
-    float terry;                // y-coord
+    float height;          // Height value
+    float terrx;           // x-coord
+    float terry;           // y-coord (z-axis in world space)
 } VertexOut; 
 
-// GLSL textureless classic 2D noise "cnoise",
-// with an RSL-style periodic variant "pnoise".
-// Author: Stefan Gustavson (stefan.gustavson@liu.se)
-// Version: 2011-08-22
-//
-// Many thanks to Ian McEwan of Ashima Arts for the
-// ideas for permutation and gradient selection.
-//
-// Copyright (c) 2011 Stefan Gustavson. All rights reserved.
-// Distributed under the MIT license. See LICENSE file.
-// https://github.com/ashima/webgl-noise
-//
-
+/** MATHS FUNCTIONS **/
 vec4 mod289(vec4 x)
 {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
@@ -70,7 +51,7 @@ vec2 fade(vec2 t) {
   return t*t*t*(t*(t*6.0-15.0)+10.0);
 }
 
-// Classic Perlin noise
+/** PERLIN NOISE FUNCTION **/
 float cnoise(vec2 P)
 {
   vec4 Pi = floor(P.xyxy) + vec4(0.0, 0.0, 1.0, 1.0);
@@ -110,59 +91,79 @@ float cnoise(vec2 P)
   return 2.3 * n_xy;
 }
 
-
+/** TERRAIN FUNCTION **/
 float terrain (float x, float y)
 {
-    int levels = int ((d + 2) * 3);
+	// Set terrain height variables for the procedural waves
+	float height = 0.0;
+	int levels = 6;
+	float frequency = 0.4;
+    float amplitude = 0.007;
+    float frequencyFactor = pow (2, 0.55/2.0);
+	float amplitudeFactor = pow (2, 1.10/2.0);
+	
+	// Check if near the shores of the island to gradually reduce the amplitude of the waves.
+	// (closer it is to the island, the smaller the waves are).
+	// Pythagoras has been used to calculate 'radianDistance' and 'distance' variables
+	if ((VertexST.x > 0.3 && VertexST.x < 0.7) && (VertexST.y > 0.30 && VertexST.y < 0.70))
+	{
+		float middle = 0.5;
+		float radianDistance = sqrt(0.08); // radianDistance is the distance: From the centre -> edge of the boundary.
+		float distance = sqrt( pow(middle - VertexST.x, 2) + pow(middle - VertexST.y, 2) ) / radianDistance;
+		
+		// Change amplitude of the waves from 0.007 -> 0.002 the closer the S and T coordinates are to the centre of the island
+		amplitude = 0.002 + (0.005 * distance);
+	}
+	
+	// Obtain RGB from texture map in range [0, 1]
+	vec3 textureRGB = texture(texture1, VertexST).xyz;
+	
+	if (!(textureRGB.x > 0.001))
+	{
+		for (int i = 0; i < levels; i++)
+		{
+			height += amplitude * cnoise (vec2 (frequency * x, 4 * frequency * y));
+			
+			frequency = frequency * frequencyFactor;
+			amplitude = amplitude * amplitudeFactor;
+		}
+	}
+	else
+		height += textureRGB.x / 2.0;
 
-    //float amplitudeFactor = pow (3, (e+1)/2.0f);
-	float amplitudeFactor = pow (3, (e+1)/2.0f);
-    float frequencyFactor = pow (3, (f+1.01f)/2.0f);
-    float v = 0;
-    float frequency = 1;
-    float amplitude = 1;
-    for (int i = 0; i < levels; i++)
-    {
-        v = v + amplitude * cnoise (
-                  vec2 (frequency * x, 2*frequency * y));
-        frequency = frequency * frequencyFactor;
-        amplitude = amplitude * amplitudeFactor;
-    }
-    return v;
+    return height;
 }
 
+/** NORMALIZE TERRAIN FUNCTION (For lighting) **/
 vec3 terrainNormal (float x, float y)
 {
-    float delta = 0.5;
+    float delta = 0.1;
     vec3 A = vec3 (delta, terrain (x + delta, y) - terrain (x, y), 0);
     vec3 B = vec3 (0, terrain (x, y + delta) - terrain (x, y), delta);
     return normalize (cross (B,A));
 }
 
-// Vertex sahder code
+// Main function - Vertex Shader
 void main()
 {
-    vec4    Position;
-    vec3    Normal;
-
-     Position = vec4 (VertexPosition, 1);
-
-    // Plane is in X/Z axis... use these as parameters to 
-    // the terrain() function [used as x/y coords in the terrain]
-    VertexOut.terrx = VertexPosition.x;
+    vec4 Position = vec4 (VertexPosition, 1);
+	
+	VertexOut.terrx = VertexPosition.x;
     VertexOut.terry = VertexPosition.z;
-
-    VertexOut.height = terrain( VertexOut.terrx, VertexOut.terry );
-    Position.y = (e+1.01f)*0.1f*VertexOut.height;
+	
+	VertexOut.terrx += pauto / 1500;
+	VertexOut.terry -= pauto / 1500;
+	
+	// Procedurally generate terrain based on the loaded texture
+	VertexOut.height = terrain( VertexOut.terrx, VertexOut.terry );
+	Position.y = VertexOut.height;
 
     // Calculate the normal matrix and apply to normal vector... 
     mat4 normalMatrix = transpose(inverse(ViewMatrix * WorldMatrix));
-
-    //Normal = VertexNormal;    
-    Normal = terrainNormal(VertexOut.terrx, VertexOut.terry);
+    vec3 Normal = terrainNormal(VertexOut.terrx, VertexOut.terry);
 
     VertexOut.normal = (normalMatrix * vec4(Normal, 0)).xyz;
-    VertexOut.colour = vec4(1.0,0.0,1.0,1.0);    // Testing - hard code colour to BLUE;
+    VertexOut.colour = vec4(1.0,0.0,1.0,1.0);
     VertexOut.st = VertexST;                    // Texture mapping coordinate as passed in
 
     // Populate  other important quantities, also in eye
@@ -174,13 +175,9 @@ void main()
 
     VertexOut.ShadowCoord = ProjectionMatrix * ShadowMatrix * WorldMatrix * Position;
     VertexOut.ShadowCoord = VertexOut.ShadowCoord / VertexOut.ShadowCoord.w;
-    VertexOut.ShadowCoord = (VertexOut.ShadowCoord + vec4 (1.,1.,1.,0.)) * vec4 (1./2., 1./2., 1./2., 1);
-
-    mat4 S = mat4 (vec4 (100.0f, 0, 0, 0),
-                   vec4 (0, 1.0f, 0, 0),
-                   vec4 (0, 0, 100.0f, 0),
-                   vec4 (0, 0, 0, 1));
+    VertexOut.ShadowCoord = (VertexOut.ShadowCoord + vec4 (1.,1.,1.,0.)) *
+                               vec4 (1./2., 1./2., 1./2., 1);
 
     // Populate the requried output of the Vertex Shader
-    gl_Position = ProjectionMatrix * ViewMatrix * WorldMatrix * S * Position;
+    gl_Position = ProjectionMatrix * ViewMatrix * WorldMatrix * Position;
 }

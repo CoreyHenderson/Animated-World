@@ -118,7 +118,7 @@ World::World(void)
 	Shader * eagleShader = new Shader((char *) "eagle.vert", (char *) "empty.geom", (char *) "eagle.frag");
 
 	// Assign textures to the shaders
-	skyboxShader->assignTextureToSlot("SkyFix.png", 0);
+	skyboxShader->assignTextureToSlot("sky.png", 0);
 	groundShader->assignTextureToSlot("heightmap.png", 0);
 	boatShader->assignTextureToSlot("boat.png", 0);
 	boatShader->assignTextureToSlot("boatnormal.png", 1);
