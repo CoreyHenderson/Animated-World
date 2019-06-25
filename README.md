@@ -11,5 +11,9 @@ Launch executable (.exe) in location: Release/x64/ShaderWorld.exe
 
 Or Launch Visual Studio solution (Made with VS2017) and run on 64 bit (x64)
 
+#### OR
+
+Download the executable file here: https://drive.google.com/open?id=1TXGV0lk_c1b8RRFm_QGfX6Fgsg3K7Of8
+
 ### Controls:
 <img src="https://i.imgur.com/E5ycv3s.png" width="700" >
